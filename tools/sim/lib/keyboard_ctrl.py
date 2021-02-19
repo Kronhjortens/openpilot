@@ -1,7 +1,9 @@
-import time
 import sys
 import termios
-from termios import *
+import time
+from termios import (BRKINT, CS8, CSIZE, ECHO, ICANON, ICRNL, IEXTEN, INPCK,
+                     ISIG, ISTRIP, IXON, PARENB, VMIN, VTIME)
+from typing import Any
 
 # Indexes for termios list.
 IFLAG = 0
@@ -35,13 +37,21 @@ def getch():
 def keyboard_poll_thread(q):
   while True:
     c = getch()
-    print("got %s" % c)
+    # print("got %s" % c)
     if c == '1':
       q.put(str("cruise_up"))
     if c == '2':
       q.put(str("cruise_down"))
     if c == '3':
       q.put(str("cruise_cancel"))
+    if c == 'w':
+      q.put(str("throttle_%f" % 1.0))
+    if c == 'a':
+      q.put(str("steer_%f" % 0.15))
+    if c == 's':
+      q.put(str("brake_%f" % 1.0))
+    if c == 'd':
+      q.put(str("steer_%f" % -0.15))
     if c == 'q':
       exit(0)
 
@@ -52,10 +62,9 @@ def test(q):
 
 if __name__ == '__main__':
   from multiprocessing import Process, Queue
-  q = Queue()
+  q : Any = Queue()
   p = Process(target=test, args=(q,))
   p.daemon = True
   p.start()
 
   keyboard_poll_thread(q)
-

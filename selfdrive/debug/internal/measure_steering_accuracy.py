@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+# type: ignore
+
 import os
 import argparse
 import signal
-from collections import deque, defaultdict
-from statistics import mean
+from collections import defaultdict
 
 import cereal.messaging as messaging
 
@@ -29,7 +30,7 @@ if __name__ == "__main__":
   stats = defaultdict(lambda: {'err': 0, "cnt": 0, "=": 0, "+": 0, "-": 0})
   cnt = 0
   total_error = 0
-  
+
   while messaging.recv_one(carControl):
     sm.update()
     msg_cnt += 1
@@ -46,7 +47,7 @@ if __name__ == "__main__":
       if cnt >= 500:
         # calculate error before rounding
         actual_angle = sm['controlsState'].angleSteers
-        desired_angle = sm['carControl'].actuators.steerAngle
+        desired_angle = sm['carControl'].actuators.steeringAngleDeg
         angle_error = abs(desired_angle - actual_angle)
 
         # round numbers

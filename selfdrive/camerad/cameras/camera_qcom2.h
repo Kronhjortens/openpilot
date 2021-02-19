@@ -1,34 +1,35 @@
-#ifndef CAMERA_H
-#define CAMERA_H
+#pragma once
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
 
-#include "common/mat.h"
-#include "common/visionbuf.h"
-#include "common/buffering.h"
-
 #include "camera_common.h"
-
 #include "media/cam_req_mgr.h"
 
 #define FRAME_BUF_COUNT 4
-#define METADATA_BUF_COUNT 4
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define ANALOG_GAIN_MAX_IDX 15 // 0xF is bypass
+#define EXPOSURE_TIME_MIN 8 // min time limited by HDR exp factor
+#define EXPOSURE_TIME_MAX 1132 // with HDR, no slower than 1/25 sec (1416 lines)
 
+#define HLC_THRESH 240
+#define HLC_A 80
+
+#define EF_LOWPASS_K 0.35
+
+#define DEBAYER_LOCAL_WORKSIZE 16
 
 typedef struct CameraState {
   CameraInfo ci;
-  FrameMetadata camera_bufs_metadata[FRAME_BUF_COUNT];
-  TBuffer camera_tb;
 
-  int frame_size;
-  float digital_gain;
-  mat3 transform;
+  float analog_gain_frac;
+  uint16_t analog_gain;
+  bool dc_gain_enabled;
+  int exposure_time;
+  int exposure_time_min;
+  int exposure_time_max;
+  float ef_filtered;
 
   int device_iommu;
   int cdm_iommu;
@@ -42,7 +43,6 @@ typedef struct CameraState {
 
   int camera_num;
 
-  VisionBuf *bufs;
 
   uint32_t session_handle;
 
@@ -54,14 +54,19 @@ typedef struct CameraState {
 
   int buf0_handle;
   int buf_handle[FRAME_BUF_COUNT];
-  int sched_request_id;
-  int request_ids[FRAME_BUF_COUNT];
   int sync_objs[FRAME_BUF_COUNT];
+  int request_ids[FRAME_BUF_COUNT];
+  int request_id_last;
+  int frame_id_last;
+  int idx_offset;
+  bool skipped;
 
   struct cam_req_mgr_session_info req_mgr_session_info;
+
+  CameraBuf buf;
 } CameraState;
 
-typedef struct DualCameraState {
+typedef struct MultiCameraState {
   int device;
 
   int video0_fd;
@@ -71,16 +76,14 @@ typedef struct DualCameraState {
   CameraState rear;
   CameraState front;
   CameraState wide;
-} DualCameraState;
 
-void cameras_init(DualCameraState *s);
-void cameras_open(DualCameraState *s, VisionBuf *camera_bufs_rear, VisionBuf *camera_bufs_focus, VisionBuf *camera_bufs_stats, VisionBuf *camera_bufs_front);
-void cameras_run(DualCameraState *s);
+  pthread_mutex_t isp_lock;
+
+  SubMaster *sm;
+  PubMaster *pm;
+} MultiCameraState;
+
+void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_id, cl_context ctx);
+void cameras_open(MultiCameraState *s);
+void cameras_run(MultiCameraState *s);
 void camera_autoexposure(CameraState *s, float grey_frac);
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
-
-#endif
-

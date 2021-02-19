@@ -1,23 +1,15 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import os
 
 from common.basedir import BASEDIR
 os.environ['BASEDIR'] = BASEDIR
-SCALE = float(os.getenv("SCALE", 1.0))
+SCALE = float(os.getenv("SCALE", "1"))
 
 import argparse
-import zmq
-import pygame
+import pygame  # pylint: disable=import-error
 import numpy as np
-import cv2
+import cv2  # pylint: disable=import-error
 import sys
-import traceback
-from collections import namedtuple
-from cereal import car
-from common.params import Params
-from tools.lib.lazy_property import lazy_property
-from cereal.messaging import sub_sock, recv_one_or_none, recv_one
-from cereal.services import service_list
 import cereal.messaging as messaging
 
 _BB_OFFSET = 0, 0
@@ -27,14 +19,11 @@ _FULL_FRAME_TO_BB = np.linalg.inv(_BB_TO_FULL_FRAME)
 _FULL_FRAME_SIZE = 1164, 874
 
 
-
 def pygame_modules_have_loaded():
   return pygame.display.get_init() and pygame.font.get_init()
 
 
 def ui_thread(addr, frame_address):
-  context = zmq.Context.instance()
-
   pygame.init()
   pygame.font.init()
   assert pygame_modules_have_loaded()
@@ -46,7 +35,7 @@ def ui_thread(addr, frame_address):
 
   camera_surface = pygame.surface.Surface((_FULL_FRAME_SIZE[0] * SCALE, _FULL_FRAME_SIZE[1] * SCALE), 0, 24).convert()
 
-  frame = messaging.sub_sock('frame', conflate=True)
+  frame = messaging.sub_sock('roadCameraState', conflate=True)
 
   img = np.zeros((_FULL_FRAME_SIZE[1], _FULL_FRAME_SIZE[0], 3), dtype='uint8')
   imgff = np.zeros((_FULL_FRAME_SIZE[1], _FULL_FRAME_SIZE[0], 3), dtype=np.uint8)
@@ -57,10 +46,10 @@ def ui_thread(addr, frame_address):
 
     # ***** frame *****
     fpkt = messaging.recv_one(frame)
-    yuv_img = fpkt.frame.image
+    yuv_img = fpkt.roadCameraState.image
 
-    if fpkt.frame.transform:
-      yuv_transform = np.array(fpkt.frame.transform).reshape(3, 3)
+    if fpkt.roadCameraState.transform:
+      yuv_transform = np.array(fpkt.roadCameraState.transform).reshape(3, 3)
     else:
       # assume frame is flipped
       yuv_transform = np.array([[-1.0, 0.0, _FULL_FRAME_SIZE[0] - 1],
@@ -78,7 +67,7 @@ def ui_thread(addr, frame_address):
     else:
       # actually RGB
       img = np.frombuffer(yuv_img, dtype=np.uint8).reshape((_FULL_FRAME_SIZE[1], _FULL_FRAME_SIZE[0], 3))
-      img = img[:, :, ::-1] # Convert BGR to RGB
+      img = img[:, :, ::-1]  # Convert BGR to RGB
 
     height, width = img.shape[:2]
     img_resized = cv2.resize(

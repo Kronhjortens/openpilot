@@ -44,7 +44,7 @@ class Window : public QWidget {
 
     QMap<int, LogReader*> lrs;
     QMap<int, FrameReader*> frs;
-    
+
 
     // cache the bar
     QPixmap *px = NULL;
@@ -72,7 +72,7 @@ Window::Window(QString route_, int seek, int use_api_) : route(route_), use_api(
     file.open(QIODevice::ReadOnly | QIODevice::Text);
     settings = file.readAll();
     file.close();
-      
+
     QJsonDocument sd = QJsonDocument::fromJson(settings.toUtf8());
     qWarning() << sd.isNull(); // <- print false :)
     QJsonObject sett2 = sd.object();
@@ -97,7 +97,7 @@ bool Window::addSegment(int i) {
       lrs.insert(i, new LogReader(fn, &events, &events_lock, &unlogger->eidx));
     } else {
       QString log_fn = this->log_paths.at(i).toString();
-      lrs.insert(i, new LogReader(log_fn, &events, &events_lock, &unlogger->eidx));  
+      lrs.insert(i, new LogReader(log_fn, &events, &events_lock, &unlogger->eidx));
 
     }
 
@@ -114,8 +114,8 @@ bool Window::addSegment(int i) {
       QString camera_fn = this->camera_paths.at(i).toString();
       frs.insert(i, new FrameReader(qPrintable(camera_fn)));
     }
-    
-    
+
+
     return true;
   }
   return false;
@@ -161,11 +161,11 @@ void Window::paintEvent(QPaintEvent *event) {
   timer.start();
 
   uint64_t t0 = events.begin().key();
-  uint64_t t1 = (events.end()-1).key();
 
   //p.drawRect(0, 0, 600, 100);
 
   // TODO: we really don't have to redraw this every time, only on updates to events
+  float vEgo = 0.;
   int this_event_size = events.size();
   if (last_event_size != this_event_size) {
     if (px != NULL) delete px;
@@ -180,10 +180,11 @@ void Window::paintEvent(QPaintEvent *event) {
     for (auto e : events) {
       auto type = e.which();
       //printf("%lld %d\n", e.getLogMonoTime()-t0, type);
-      if (type == cereal::Event::CONTROLS_STATE) {
+      if (type == cereal::Event::CAR_STATE) {
+        vEgo = e.getCarState().getVEgo();
+      } else if (type == cereal::Event::CONTROLS_STATE) {
         auto controlsState = e.getControlsState();
         uint64_t t = (e.getLogMonoTime()-t0);
-        float vEgo = controlsState.getVEgo();
         int enabled = controlsState.getState() == cereal::ControlsState::OpenpilotState::ENABLED;
         int rt = timeToPixel(t); // 250 ms per pixel
         if (rt != lt) {
@@ -193,9 +194,9 @@ void Window::paintEvent(QPaintEvent *event) {
             tt.drawLine(lt, 300-lvv, rt, 300-vv);
 
             if (enabled) {
-              tt.setPen(Qt::green); 
+              tt.setPen(Qt::green);
             } else {
-              tt.setPen(Qt::blue); 
+              tt.setPen(Qt::blue);
             }
 
             tt.drawLine(rt, 300, rt, 600);
@@ -237,7 +238,7 @@ int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
   QString route(argv[1]);
-  
+
   int use_api = QString::compare(QString("use_api"), route, Qt::CaseInsensitive) == 0;
   int seek = QString(argv[2]).toInt();
   printf("seek: %d\n", seek);
@@ -251,7 +252,7 @@ int main(int argc, char *argv[]) {
   }
 
   Window window(route, seek, use_api);
-  
+
   window.resize(1920, 800);
   window.setWindowTitle("nui unlogger");
   window.show();

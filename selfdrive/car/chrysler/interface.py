@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 from cereal import car
-from selfdrive.config import Conversions as CV
-from selfdrive.controls.lib.drive_helpers import EventTypes as ET, create_event
-from selfdrive.car.chrysler.values import Ecu, ECU_FINGERPRINT, CAR, FINGERPRINTS
-from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, is_ecu_disconnected, gen_empty_fingerprint
+from selfdrive.car.chrysler.values import CAR
+from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint
 from selfdrive.car.interfaces import CarInterfaceBase
 
-class CarInterface(CarInterfaceBase):
 
+class CarInterface(CarInterfaceBase):
   @staticmethod
   def compute_gb(accel, speed):
     return float(accel) / 3.0
 
   @staticmethod
-  def get_params(candidate, fingerprint=gen_empty_fingerprint(), has_relay=False, car_fw=[]):
-    ret = CarInterfaceBase.get_std_params(candidate, fingerprint, has_relay)
+  def get_params(candidate, fingerprint=None, car_fw=None):
+    if fingerprint is None:
+      fingerprint = gen_empty_fingerprint()
+
+    ret = CarInterfaceBase.get_std_params(candidate, fingerprint)
     ret.carName = "chrysler"
     ret.safetyModel = car.CarParams.SafetyModel.chrysler
 
@@ -23,10 +24,10 @@ class CarInterface(CarInterfaceBase):
 
     # Speed conversion:              20, 45 mph
     ret.wheelbase = 3.089  # in meters for Pacifica Hybrid 2017
-    ret.steerRatio = 16.2 # Pacifica Hybrid 2017
+    ret.steerRatio = 16.2  # Pacifica Hybrid 2017
     ret.mass = 2858. + STD_CARGO_KG  # kg curb weight Pacifica Hybrid 2017
     ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kiBP = [[9., 20.], [9., 20.]]
-    ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.15,0.30], [0.03,0.05]]
+    ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.15, 0.30], [0.03, 0.05]]
     ret.lateralTuning.pid.kf = 0.00006   # full torque for 10 deg at 80mph means 0.00007818594
     ret.steerActuatorDelay = 0.1
     ret.steerRateCost = 0.7
@@ -51,8 +52,7 @@ class CarInterface(CarInterfaceBase):
     # mass and CG position, so all cars will have approximately similar dyn behaviors
     ret.tireStiffnessFront, ret.tireStiffnessRear = scale_tire_stiffness(ret.mass, ret.wheelbase, ret.centerToFront)
 
-    ret.enableCamera = is_ecu_disconnected(fingerprint[0], FINGERPRINTS, ECU_FINGERPRINT, candidate, Ecu.fwdCamera) or has_relay
-    print("ECU Camera Simulated: {0}".format(ret.enableCamera))
+    ret.enableCamera = True
 
     return ret
 
@@ -67,18 +67,16 @@ class CarInterface(CarInterfaceBase):
     ret.canValid = self.cp.can_valid and self.cp_cam.can_valid
 
     # speeds
-    ret.yawRate = self.VM.yaw_rate(ret.steeringAngle * CV.DEG_TO_RAD, ret.vEgo)
     ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
-    ret.buttonEvents = []
-
     # events
-    events = self.create_common_events(ret, extra_gears=[car.CarState.GearShifter.low], gas_resume_speed=2.)
+    events = self.create_common_events(ret, extra_gears=[car.CarState.GearShifter.low],
+                                       gas_resume_speed=2.)
 
     if ret.vEgo < self.CP.minSteerSpeed:
-      events.append(create_event('belowSteerSpeed', [ET.WARNING]))
+      events.add(car.CarEvent.EventName.belowSteerSpeed)
 
-    ret.events = events
+    ret.events = events.to_msg()
 
     # copy back carState packet to CS
     self.CS.out = ret.as_reader()
@@ -90,7 +88,7 @@ class CarInterface(CarInterfaceBase):
   def apply(self, c):
 
     if (self.CS.frame == -1):
-      return [] # if we haven't seen a frame 220, then do not update.
+      return []  # if we haven't seen a frame 220, then do not update.
 
     can_sends = self.CC.update(c.enabled, self.CS, c.actuators, c.cruiseControl.cancel, c.hudControl.visualAlert)
 

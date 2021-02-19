@@ -71,7 +71,11 @@ LogReader::LogReader(const QString& file, Events *events_, QReadWriteLock* event
     while (1) {
       mergeEvents(cdled.get());
     }
-  }); 
+  });
+}
+
+LogReader::~LogReader() {
+  delete parser;
 }
 
 void LogReader::mergeEvents(int dled) {
@@ -94,8 +98,8 @@ void LogReader::mergeEvents(int dled) {
 
       // hack
       // TODO: rewrite with callback
-      if (event.which() == cereal::Event::ENCODE_IDX) {
-        auto ee = event.getEncodeIdx();
+      if (event.which() == cereal::Event::ROAD_ENCODE_IDX) {
+        auto ee = event.getRoadEncodeIdx();
         eidx_local.insert(ee.getFrameId(), qMakePair(ee.getSegmentNum(), ee.getSegmentId()));
       }
 

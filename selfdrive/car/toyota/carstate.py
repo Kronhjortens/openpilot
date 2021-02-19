@@ -16,10 +16,10 @@ class CarState(CarStateBase):
     # All TSS2 car have the accurate sensor
     self.accurate_steer_angle_seen = CP.carFingerprint in TSS2_CAR
 
-    # On NO_DSU cars but not TSS2 cars the cp.vl["STEER_TORQUE_SENSOR"]['STEER_ANGLE']
-    # is zeroed to where the steering angle is at start.
+    # On cars with cp.vl["STEER_TORQUE_SENSOR"]['STEER_ANGLE']
+    # the signal is zeroed to where the steering angle is at start.
     # Need to apply an offset as soon as the steering angle measurements are both received
-    self.needs_angle_offset = CP.carFingerprint not in TSS2_CAR
+    self.needs_angle_offset = True
     self.angle_offset = 0.
 
   def update(self, cp, cp_cam):
@@ -52,17 +52,18 @@ class CarState(CarStateBase):
       self.accurate_steer_angle_seen = True
 
     if self.accurate_steer_angle_seen:
-      ret.steeringAngle = cp.vl["STEER_TORQUE_SENSOR"]['STEER_ANGLE'] - self.angle_offset
+      ret.steeringAngleDeg = cp.vl["STEER_TORQUE_SENSOR"]['STEER_ANGLE'] - self.angle_offset
 
       if self.needs_angle_offset:
         angle_wheel = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
-        if abs(angle_wheel) > 1e-3 and abs(ret.steeringAngle) > 1e-3:
+        if abs(angle_wheel) > 1e-3 and abs(ret.steeringAngleDeg) > 1e-3:
           self.needs_angle_offset = False
-          self.angle_offset = ret.steeringAngle - angle_wheel
+          self.angle_offset = ret.steeringAngleDeg - angle_wheel
     else:
-      ret.steeringAngle = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
+      ret.steeringAngleDeg = cp.vl["STEER_ANGLE_SENSOR"]['STEER_ANGLE'] + cp.vl["STEER_ANGLE_SENSOR"]['STEER_FRACTION']
 
-    ret.steeringRate = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
+    ret.steeringRateDeg = cp.vl["STEER_ANGLE_SENSOR"]['STEER_RATE']
+
     can_gear = int(cp.vl["GEAR_PACKET"]['GEAR'])
     ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(can_gear, None))
     ret.leftBlinker = cp.vl["STEERING_LEVERS"]['TURN_SIGNALS'] == 1
@@ -72,6 +73,7 @@ class CarState(CarStateBase):
     ret.steeringTorqueEps = cp.vl["STEER_TORQUE_SENSOR"]['STEER_TORQUE_EPS']
     # we could use the override bit from dbc, but it's triggered at too high torque values
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD
+    ret.steerWarning = cp.vl["EPS_STATUS"]['LKA_STATE'] not in [1, 5]
 
     if self.CP.carFingerprint == CAR.LEXUS_IS:
       ret.cruiseState.available = cp.vl["DSU_CRUISE"]['MAIN_ON'] != 0
@@ -89,6 +91,7 @@ class CarState(CarStateBase):
     else:
       ret.cruiseState.standstill = self.pcm_acc_status == 7
     ret.cruiseState.enabled = bool(cp.vl["PCM_CRUISE"]['CRUISE_ACTIVE'])
+    ret.cruiseState.nonAdaptive = cp.vl["PCM_CRUISE"]['CRUISE_STATE'] in [1, 2, 3, 4, 5, 6]
 
     if self.CP.carFingerprint == CAR.PRIUS:
       ret.genericToggle = cp.vl["AUTOPARK_STATUS"]['STATE'] != 0
@@ -99,11 +102,10 @@ class CarState(CarStateBase):
     ret.espDisabled = cp.vl["ESP_CONTROL"]['TC_DISABLED'] != 0
     # 2 is standby, 10 is active. TODO: check that everything else is really a faulty state
     self.steer_state = cp.vl["EPS_STATUS"]['LKA_STATE']
-    self.steer_warning = cp.vl["EPS_STATUS"]['LKA_STATE'] not in [1, 5]
-    
+
     if self.CP.carFingerprint in TSS2_CAR:
-      ret.leftBlindspot = cp.vl["BSM"]['L_ADJACENT'] == 1
-      ret.rightBlindspot = cp.vl["BSM"]['R_ADJACENT'] == 1
+      ret.leftBlindspot = (cp.vl["BSM"]['L_ADJACENT'] == 1) or (cp.vl["BSM"]['L_APPROACHING'] == 1)
+      ret.rightBlindspot = (cp.vl["BSM"]['R_ADJACENT'] == 1) or (cp.vl["BSM"]['R_APPROACHING'] == 1)
 
     return ret
 
@@ -160,7 +162,6 @@ class CarState(CarStateBase):
       signals.append(("LOW_SPEED_LOCKOUT", "PCM_CRUISE_2", 0))
       checks.append(("PCM_CRUISE_2", 33))
 
-
     if CP.carFingerprint == CAR.PRIUS:
       signals += [("STATE", "AUTOPARK_STATUS", 0)]
 
@@ -172,16 +173,23 @@ class CarState(CarStateBase):
 
     if CP.carFingerprint in TSS2_CAR:
       signals += [("L_ADJACENT", "BSM", 0)]
+      signals += [("L_APPROACHING", "BSM", 0)]
       signals += [("R_ADJACENT", "BSM", 0)]
+      signals += [("R_APPROACHING", "BSM", 0)]
 
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, 0)
 
   @staticmethod
   def get_cam_can_parser(CP):
 
-    signals = [("FORCE", "PRE_COLLISION", 0), ("PRECOLLISION_ACTIVE", "PRE_COLLISION", 0)]
+    signals = [
+      ("FORCE", "PRE_COLLISION", 0),
+      ("PRECOLLISION_ACTIVE", "PRE_COLLISION", 0)
+    ]
 
     # use steering message to check if panda is connected to frc
-    checks = [("STEERING_LKA", 42)]
+    checks = [
+      ("STEERING_LKA", 42)
+    ]
 
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, 2)

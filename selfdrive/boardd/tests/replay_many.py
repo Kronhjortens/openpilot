@@ -10,7 +10,7 @@ from multiprocessing import Pool
 
 jungle = "JUNGLE" in os.environ
 if jungle:
-  from panda_jungle import PandaJungle # pylint: disable=import-error
+  from panda_jungle import PandaJungle  # pylint: disable=import-error
 
 import cereal.messaging as messaging
 from selfdrive.boardd.boardd import can_capnp_to_can_list
@@ -36,6 +36,7 @@ def send_thread(sender_serial):
       while True:
         tsc = messaging.recv_one(can_sock)
         snd = can_capnp_to_can_list(tsc.can)
+        snd = list(filter(lambda x: x[-1] <= 2, snd))
 
         try:
           sender.can_send_many(snd)
@@ -54,7 +55,6 @@ if __name__ == "__main__":
   else:
     serials = Panda.list()
   num_senders = len(serials)
-
 
   if num_senders == 0:
     print("No senders found. Exiting")
@@ -81,3 +81,4 @@ if __name__ == "__main__":
       pool.terminate()
       pool.join()
       raise
+

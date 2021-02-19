@@ -1,11 +1,13 @@
 #!/bin/bash -e
 
-# NOTE: ubuntu_setup.sh doesn't run! only for reading now
 
 sudo apt-get update && sudo apt-get install -y \
     autoconf \
     build-essential \
     bzip2 \
+    capnproto \
+    cppcheck \
+    libcapnp-dev \
     clang \
     cmake \
     curl \
@@ -31,13 +33,19 @@ sudo apt-get update && sudo apt-get install -y \
     libsqlite3-dev \
     libtool \
     libusb-1.0-0-dev \
-    libzmq5-dev \
+    libzmq3-dev \
+    libsdl-image1.2-dev libsdl-mixer1.2-dev libsdl-ttf2.0-dev libsmpeg-dev \
+    libsdl1.2-dev  libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev libfreetype6-dev \
+    libsystemd-dev \
     locales \
     ocl-icd-libopencl1 \
     ocl-icd-opencl-dev \
     opencl-headers \
     python-dev \
-    python-pip \
+    python3-pip \
+    qt5-default \
+    qtmultimedia5-dev \
+    qtwebengine5-dev \
     screen \
     sudo \
     vim \
@@ -58,7 +66,8 @@ fi
 # install bashrc
 source ~/.bashrc
 if [ -z "$OPENPILOT_ENV" ]; then
-  echo "source $HOME/openpilot/tools/openpilot_env.sh" >> ~/.bashrc
+  OP_DIR=$(git rev-parse --show-toplevel)
+  echo "source $OP_DIR/tools/openpilot_env.sh" >> ~/.bashrc
   source ~/.bashrc
   echo "added openpilot_env to bashrc"
 fi
@@ -71,24 +80,21 @@ git lfs pull
 git submodule init
 git submodule update
 
-# install python 3.7.3 globally (you should move to python3 anyway)
-pyenv install -s 3.7.3
-pyenv global 3.7.3
+# install python 3.8.2 globally (you should move to python3 anyway)
+pyenv install -s 3.8.2
+pyenv global 3.8.2
 pyenv rehash
 
 # **** in python env ****
 
+# upgrade pip
+pip install --upgrade pip==20.2.4
+
 # install pipenv
-pip install pipenv==2018.11.26
+pip install pipenv==2020.8.13
 
 # pipenv setup (in openpilot dir)
-pipenv install --system --deploy
-
-# to make tools work
-pip install -r tools/requirements.txt
-
-# to make modeld work on PC with nvidia GPU
-pip install tensorflow-gpu==2.1
+pipenv install --dev --system --deploy
 
 # for loggerd to work on ubuntu
 # TODO: PC should log somewhere else

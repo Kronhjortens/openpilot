@@ -2,7 +2,7 @@
 import os
 import sys
 
-from selfdrive.test.openpilotci_upload import upload_file
+from selfdrive.test.openpilotci import upload_file
 from selfdrive.test.process_replay.compare_logs import save_log
 from selfdrive.test.process_replay.test_processes import segments, get_segment
 from selfdrive.version import get_git_commit
@@ -17,6 +17,8 @@ if __name__ == "__main__":
   ref_commit_fn = os.path.join(process_replay_dir, "model_ref_commit")
 
   ref_commit = get_git_commit()
+  if ref_commit is None:
+    raise Exception("couldn't get ref commit")
   with open(ref_commit_fn, "w") as f:
     f.write(ref_commit)
 

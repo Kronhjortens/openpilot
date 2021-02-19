@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
-import os
 import time
 
-
 from tqdm import tqdm
+
+import selfdrive.manager as manager
 from cereal.messaging import PubMaster, recv_one, sub_sock
 from tools.lib.framereader import FrameReader
-import subprocess
-import selfdrive.manager as manager
 
 
 def rreplace(s, old, new, occurrence):
@@ -22,18 +20,17 @@ def regen_model(msgs, pm, frame_reader, model_sock):
     if msg.which() == 'liveCalibration':
       pm.send('liveCalibration', msg.as_builder())
 
-
   out_msgs = []
   fidx = 0
   for msg in tqdm(msgs):
     w = msg.which()
 
-    if w == 'frame':
+    if w == 'roadCameraState':
       msg = msg.as_builder()
 
-      img = frame_reader.get(fidx, pix_fmt="rgb24")[0][:,::-1]
+      img = frame_reader.get(fidx, pix_fmt="rgb24")[0][:,:,::-1]
 
-      msg.frame.image = img.flatten().tobytes()
+      msg.roadCameraState.image = img.flatten().tobytes()
 
       pm.send(w, msg)
       model = recv_one(model_sock)
@@ -55,7 +52,7 @@ def inject_model(msgs, segment_name):
   # TODO do better than just wait for modeld to boot
   time.sleep(5)
 
-  pm = PubMaster(['liveCalibration', 'frame'])
+  pm = PubMaster(['liveCalibration', 'roadCameraState'])
   model_sock = sub_sock('model')
   try:
     out_msgs = regen_model(msgs, pm, frame_reader, model_sock)
@@ -67,7 +64,6 @@ def inject_model(msgs, segment_name):
   manager.kill_managed_process('modeld')
   time.sleep(2)
   manager.kill_managed_process('camerad')
-
 
   new_msgs = []
   midx = 0
@@ -85,8 +81,3 @@ def inject_model(msgs, segment_name):
   assert abs(len(new_msgs) - len(list(msgs))) < 2
 
   return new_msgs
-
-
-
-if __name__ == "__main__":
-  inject_model("0375fdf7b1ce594d|2019-06-13--08-32-25/3")
